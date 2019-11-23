@@ -7,7 +7,11 @@ python 3: pytorch, numpy, scipy, pandas. GPU-version only.
 
 ### How to run
 Download and put the *qps_dataset* folder under the ppami folder.
- 
+
+Create a folder to save your own trained models:
+>block quote
+
+    mkdir new_trained_models
 To test the performance of our pre-trained model, run
 >block quote
 
