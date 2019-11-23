@@ -6,7 +6,7 @@
 python 3: pytorch, numpy, scipy, pandas. GPU-version only.
 
 ### How to run
-Download and put the *qps_dataset* folder under the ppami folder.
+Download *qps\_dataset.tar.gz*, extract it, and put the extracted *qps\_dataset* folder under the ppami folder.
 
 Create a folder to save your own trained models:
 >block quote
