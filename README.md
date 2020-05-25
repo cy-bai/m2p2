@@ -1,4 +1,4 @@
-# Code and dataset for PPAMI
+# Code and dataset for M2P2
 
 ----
 ## Code
