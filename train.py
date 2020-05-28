@@ -14,21 +14,22 @@ def train_ref(mod_model, ref_model, cri_pers, iterator, optim, evaluate = False)
 
     for i_batch, sample_batched in enumerate(iterator):
         if not evaluate: optim.zero_grad()
-        # get embeddings
+        # get compact embeddings
         out = {}
         for mod in MODS:
             with torch.no_grad():
                 out[mod] = mod_model[mod](sample_batched[f'{mod}_data'].to(device),
                                       sample_batched[f'{mod}_msk'].to(device))
-        st_vote = sample_batched['ed_vote'] - sample_batched['change']
-        dur = sample_batched['dur'].float().to(device) / MAX_DUR
+        #st_vote = sample_batched['ed_vote'] - sample_batched['change']
+        #dur = sample_batched['dur'].float().to(device) / MAX_DUR
 
         y_true = sample_batched['ed_vote'].float().to(device)
 
         # get predictions
         batch_loss = {}
         for mod in MODS:
-            y_pred = ref_model[mod]({mod:out[mod]}, st_vote.float().to(device), dur)
+            y_pred = ref_model[mod]({mod:out[mod]})
+            # y_pred = ref_model[mod]({mod:out[mod]}, st_vote.float().to(device), dur)
             batch_loss[mod] = PersLoss(y_pred, y_true, cri_pers)
             pers_loss[mod] += batch_loss[mod].item()
         if not evaluate:

@@ -123,7 +123,8 @@ class Pers(nn.Module):
 
         if self.is_pers_mlp:
             # used for persuasion prediction mlp
-            ninp = feat_dim * (nmod + 1)
+            # input: heterogeneity emb (x nmod), alignemtn emb, debate meta-data
+            ninp = feat_dim * (nmod + 1) + 2
         elif self.is_ref_model:
             # used for reference unimodel
             ninp = feat_dim
@@ -131,7 +132,7 @@ class Pers(nn.Module):
             print('ERROR! Has to be either reference mdoel or persuasion model')
             return
 
-        self.fc1 = nn.Linear(ninp+2, 2*nhid)
+        self.fc1 = nn.Linear(ninp, 2*nhid)
         self.fc2 = nn.Linear(2*nhid, nhid)
         self.fc3 = nn.Linear(nhid, nout)
         self.dropout = nn.Dropout(dropout)
@@ -144,7 +145,7 @@ class Pers(nn.Module):
                 return
             inputs = [v for k, v in in_mod.items()] + [align_emb, vote_st.unsqueeze(1), dur.unsqueeze(1)]
         elif self.is_ref_model:
-            inputs = [v for k, v in in_mod.items()] + [vote_st.unsqueeze(1), dur.unsqueeze(1)]
+            inputs = [v for k, v in in_mod.items()]
         else:
             print('ERROR! Has to be either reference mdoel or persuasion model')
 
