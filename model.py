@@ -1,7 +1,5 @@
 import math
 import numpy as np
-import copy
-import random
 
 import torch
 import torch.nn as nn
@@ -12,10 +10,9 @@ import torchvision.models
 from torch.nn.modules.container import ModuleList
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
-# import libs.qp09utils
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# extract visual input embedding from VGG-features
+# extract visual primary input embedding from VGG-features
 class ImgFeat(nn.Module):
     def __init__(self, feat_dim ,dropout=0.1):
         super().__init__()
@@ -28,7 +25,7 @@ class ImgFeat(nn.Module):
         x = self.bn(x)
         return F.relu(self.dropout(x))
 
-# extract audio input embedding from COVAREP features
+# extract audio primary input embedding from COVAREP features
 class AudioFeat(nn.Module):
     def __init__(self, ninp, feat_dim ,dropout = 0.1):
         super().__init__()
@@ -40,7 +37,7 @@ class AudioFeat(nn.Module):
         x = self.bn(x)
         return F.relu(self.dropout(x))
 
-# extract language input embedding from word embedding
+# extract language primary  input embedding from word embedding
 class LangFeat(nn.Module):
     def __init__(self, ninp, feat_dim, dropout = 0.1):
         super().__init__()
@@ -70,6 +67,7 @@ class TransformerEmb(nn.Module):
         # transformer encoder
         output = self.transformer_encoder(src, src_key_padding_mask=seq_msk)
         return output
+
 # positional encoding
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout, max_len=5000):
@@ -87,7 +85,7 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
 
-# The model from raw features to latent embeddings of one modality
+# The model from raw features the compact latent embeddings of one modality
 class Emb(nn.Module):
     def __init__(self, mod, feat_dim=128, nhead=8, nhid=256, dropout = 0.1, nlayers=1):
         super(Emb, self).__init__()
@@ -114,39 +112,81 @@ class Emb(nn.Module):
         return out
 
 # the persuasion prediction 3-layer MLP
+# used for both the unimodal reference models and the final persuasion prediction model
 class Pers(nn.Module):
-    def __init__(self, feat_dim=128, nmod = 3, nhid = 16, nout = 1, dropout = 0.1):
+    def __init__(self, feat_dim=16, nmod = 3, nhid = 8, nout = 1, dropout = 0.1, is_pers_mlp = False,
+                 is_ref_model = False):
         super(Pers, self).__init__()
-        ninp = feat_dim * nmod
+
+        self.is_pers_mlp = is_pers_mlp
+        self.is_ref_model = is_ref_model
+
+        if self.is_pers_mlp:
+            # used for persuasion prediction mlp
+            ninp = feat_dim * (nmod + 1)
+        elif self.is_ref_model:
+            # used for reference unimodel
+            ninp = feat_dim
+        else:
+            print('ERROR! Has to be either reference mdoel or persuasion model')
+            return
+
         self.fc1 = nn.Linear(ninp+2, 2*nhid)
         self.fc2 = nn.Linear(2*nhid, nhid)
         self.fc3 = nn.Linear(nhid, nout)
         self.dropout = nn.Dropout(dropout)
         self.sigm = nn.Sigmoid()
 
-    def forward(self, in_mod, vote_st, dur):
-        input = torch.cat([v for k, v in in_mod.items()], dim=1)
-        input = torch.cat([input, vote_st.unsqueeze(1), dur.unsqueeze(1)], dim = 1)
+    def forward(self, in_mod, vote_st, dur, align_emb = None):
+        if self.is_pers_mlp:
+            if align_emb is None:
+                print('ERROR! need to provide the alignment embedding!')
+                return
+            inputs = [v for k, v in in_mod.items()] + [align_emb, vote_st.unsqueeze(1), dur.unsqueeze(1)]
+        elif self.is_ref_model:
+            inputs = [v for k, v in in_mod.items()] + [vote_st.unsqueeze(1), dur.unsqueeze(1)]
+        else:
+            print('ERROR! Has to be either reference mdoel or persuasion model')
+
+        input = torch.cat(inputs, dim = 1)
+
         x = self.fc1(input)
         x = F.relu(self.dropout(x))
         x = self.fc2(x)
-        x = F.relu(self.dropout(x))
+        x = F.relu(x)
         x = self.fc3(x)
         return self.sigm(x)
+# shared MLP for alignment module
+class Align(nn.Module):
+    def __init__(self, nin, nout, dropout = 0.1):
+        super(Align, self).__init__()
+        self.fc1 = nn.Linear(nin, nout)
+        self.dropout = nn.Dropout(dropout)
 
+    def forward(self, latent_emb_mod):
+        align_mod = {}
+
+        for mod, x in latent_emb_mod.items():
+            align_mod[mod] = F.relu(self.dropout(self.fc1(x)))
+
+        align_cat = torch.cat([proj_out.unsqueeze(dim = 0) for proj_out in align_mod.values()], dim=0)
+
+        align_emb = torch.mean(align_cat, dim = 0)
+
+        return align_emb, align_mod
 
 # MISC
 def count_trained_parameters(params):
     return sum(p.numel() for p in params if p.requires_grad)
 def trained_params(mod_model):
     params = []
-    pers_msk = []
+    # pers_msk = []
     for mod, model in mod_model.items():
         param = [p for p in model.parameters() if p.requires_grad]
-        if mod == 'pers':
-            pers_msk += [True] * len(param)
-        else:
-            pers_msk += [False] * len(param)
+        # if mod == 'pers':
+        #     pers_msk += [True] * len(param)
+        # else:
+        #     pers_msk += [False] * len(param)
         params += param
-
-    return params, np.array(pers_msk)
+    return params
+    # return params, np.array(pers_msk)

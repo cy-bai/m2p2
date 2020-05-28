@@ -2,112 +2,135 @@
 # coding: utf-8
 import argparse
 from torch import optim
-from utils import *
-from dataset import *
-import model as myModel
-from train import *
+
+import torch.nn as nn
+import time
+import pandas as pd
+
+import utils
+import model as m2p2
+import train
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--fd', required=False, default =0, type=int, help='fold id')
-parser.add_argument('--mod', required=False, default ='avl', type=str, help='modalities')
-parser.add_argument('--cos', required=False, default ='123', type=str, help='cosine loss terms')
-parser.add_argument('--lamda', required=False, default =0.01, type=float, help='weight of alignment loss')
+parser.add_argument('--mod', required=False, default ='avl', type=str,
+                    help='modalities: a,v,l,or any combination of them')
+parser.add_argument('--cos', required=False, default ='123', type=str,
+                    help='alignment loss terms, '
+                         '1 means cosine loss for a,v modalities, '
+                         '2 means that for v,l, '
+                         '3 means that for l,a')
+parser.add_argument('--w_align', required=False, default =0.1, type=float, help='weight of alignment loss')
 parser.add_argument('--nhead', required=False, default =4, type=int, help='# heads attention')
-parser.add_argument('--nfeat', required=False, default =16, type=int, help='latent embedding dimension')
-parser.add_argument('--nlayers', required=False, default=1, type=int, help='# layers of the transformer encoder')
-parser.add_argument('--dp', required=False, default=0.4, type=float, help='dropout')
+parser.add_argument('--nfeat', required=False, default =16, type=int, help='# feats embed')
+parser.add_argument('--nlayers', required=False, default=1, type=int, help='# transformer encoder layers')
+parser.add_argument('--dp', required=False, default=0.4, type=float, help='# dropout')
 ### boolean flags
-parser.add_argument('--wloss', help='use reference models for weighted fusion', action='store_true')
-parser.add_argument('--test', help='test by loading a pre-trained model', action='store_true')
-parser.add_argument('--verbose', help='print information', action='store_true')
+parser.add_argument('--het_module', help='use reference models for weighted fusion', action='store_true')
+parser.add_argument('--test_mode', help='test mode: loading a pre-trained model', action='store_true')
+parser.add_argument('--verbose', help='print more information', action='store_true')
 
 args = parser.parse_args()
 FOLD = int(args.fd)
 MODS = list(args.mod)
-LOSS_GUIDED = args.wloss
+WITH_HET_MODULE = args.het_module # enable hetergeneity module or not
 COSINE = [int(i) for i in list(args.cos)]
-WEIGHT = round(args.lamda, 2)
-print('loss guide', LOSS_GUIDED, WEIGHT)
+GAMMA = round(args.w_align, 2) # weight for alignment loss
+print('het module:', WITH_HET_MODULE, ', alignment module loss weight:', GAMMA)
 VERBOSE = args.verbose
 
 MODEL_DIR = f'./new_trained_models/fold{FOLD}' # where to save your own trained model
-PRETRAIN_MODEL_DIR = f'./models/fold{FOLD}' # where to load the provided pre-trained model
-
+PRETRAIN_MODEL_DIR = f'./pretrained_models/fold{FOLD}/' # where to load the provided pre-trained model
 # load meta file
-df = pd.read_csv(META, index_col = 'seg_id')
+df = pd.read_csv(utils.META, index_col = 'seg_id')
 
 nfeat = args.nfeat
 DP= args.dp
 # split the data to train, validation, test, according to fold FOLD
-tra_data, tra_loader, val_loader, tes_loader = GetSplit(FOLD, df, MODS)
-# initialize models to output latent embeddings
-mod_model = {mod:myModel.Emb(mod,nfeat, args.nhead, nfeat, dropout=DP, nlayers=args.nlayers).to(device) for mod in MODS}
-# initialize models to predict persuasiveness given latent embeddings
-pers_nhid = nfeat//2
-mod_model['pers'] = myModel.Pers(nfeat, nmod = len(MODS), nhid = pers_nhid, dropout=DP).to(device)
-# initialize reference models
-ref_model = {mod:myModel.Pers(nfeat, nmod = 1, nhid = pers_nhid, dropout = DP).to(device) for mod in MODS}
+tra_loader, val_loader, tes_loader = utils.GetSplit(FOLD, df, MODS)
 
-# alignment loss for each pair of modality
+########## m2p2 model #########
+# initialize models to output the latent embeddings for a,v,l
+m2p2_model = {mod:m2p2.Emb(mod,nfeat, args.nhead, nfeat, dropout=DP,
+                           nlayers=args.nlayers).to(utils.device) for mod in MODS}
+# initialize models to predict persuasiveness given alignment embeddings, heterogeneity embeddings and debate meta-data
+m2p2_model['pers'] = m2p2.Pers(nfeat, nmod = len(MODS), nhid = nfeat//2,
+                               dropout=DP, is_pers_mlp = True).to(utils.device)
+# initialize the shared mlp for alignemnt module
+m2p2_model['align_mlp'] = m2p2.Align(nin = nfeat, nout = nfeat, dropout = DP).to(utils.device)
+params = m2p2.trained_params(m2p2_model)
+print('####### total trained #params', m2p2.count_trained_parameters(params))
+m2p2_optim = optim.Adam(params, lr = utils.LR, weight_decay = utils.W_DCAY)
+########## end of m2p2 model #########
+
+########### ref model ##########
+if not args.test_mode:
+    # initialize unimodal reference models
+    ref_model = {mod:m2p2.Pers(nfeat, nmod = 1, nhid = nfeat//2,
+                           dropout = DP, is_ref_model = True).to(utils.device) for mod in MODS}
+    ref_params = m2p2.trained_params(ref_model)
+    # optimizer for the reference models
+    ref_model_optim = optim.Adam(ref_params, lr=utils.LR, weight_decay=utils.W_DCAY)
+########### end of ref model ##########
+
+# alignment loss for each pair of modalities
 cri_align = nn.CosineEmbeddingLoss(reduction = 'mean')
 # persuasion MSE loss
 cri_pers = nn.MSELoss()
 
 if VERBOSE:
-    for k,v in mod_model.items():
+    for k,v in m2p2_model.items():
         print(v)
-        print(myModel.count_trained_parameters(v.parameters()))
-
-params, pers_msk = myModel.trained_params(mod_model)
-print('####### total trained #params', myModel.count_trained_parameters(params))
-# optimizer for tha main model
-main_optim = optim.Adam(params, lr = 1e-3, weight_decay = 1e-5)
-ref_params,_ = myModel.trained_params(ref_model)
-# optimizer for the reference models
-ref_model_optim = optim.Adam(ref_params, lr = 1e-3 , weight_decay = 1e-5)
+        print(m2p2.count_trained_parameters(v.parameters()))
 
 min_loss = 1e5
-# initialize concat weights
-concat_weights = {mod: 1./len(MODS) for mod in MODS}
+# initialize concat weights: w_A, w_V, w_L
+mod_weights = {mod: 1./len(MODS) for mod in MODS}
 
-if not args.test:
-    ##### training process #####
-    for epoch in range(N_EPOCHS):
+if not args.test_mode:
+    ##### training process (master procedure in alg 1) ######
+    for epoch in range(utils.N_EPOCHS):
         start_time = time.time()
-        # train the main model
-        train_emb_loss, train_pers_loss = train(mod_model, tra_loader, main_optim, cri_align, cri_pers,
-                                                COSINE, concat_weights, WEIGHT, False)
-        val_emb_loss, val_pers_loss = train(mod_model, val_loader, main_optim, cri_align, cri_pers,
-                                            COSINE, concat_weights, WEIGHT, True)
 
-        # save the optimal main model when the validation loss is the minimal and the epoch exceeds half of NEPOCHS
-        cur_loss = val_pers_loss
-        if epoch > N_EPOCHS//2 and cur_loss < min_loss:
-            min_loss = cur_loss
-            SaveModel(mod_model, MODEL_DIR, concat_weights)
+        train_emb_loss, train_pers_loss = train.train_m2p2(m2p2_model, tra_loader, m2p2_optim, cri_align, cri_pers,
+                                                           COSINE, mod_weights, GAMMA, False)
 
-        # train the reference models
-        if LOSS_GUIDED:
-            for ref_epoch in range(N_REF_EPOCHS):
-                _ = train_ref(mod_model, ref_model, cri_pers, tra_loader, ref_model_optim, False)
+        val_emb_loss, val_pers_loss = train.train_m2p2(m2p2_model, val_loader, m2p2_optim, cri_align, cri_pers,
+                                                           COSINE, mod_weights, GAMMA, True)
+
+        val_loss = val_pers_loss
+
+        # save the optimal main m2p2 when the validation loss is the minimal
+        if val_loss < min_loss:
+            min_loss = val_loss
+            utils.SaveModel(m2p2_model, MODEL_DIR+'opt/', mod_weights)
+
+        # train the reference models (slave procedure in alg 1)
+        if WITH_HET_MODULE:
+            for ref_epoch in range(utils.n_EPOCHS):
+                _ = train.train_ref(m2p2_model, ref_model, cri_pers, tra_loader, ref_model_optim, False)
+        # end of slave procedure
+
         # apply the trained reference models to get current concat weights
-        cur_concat_weights = train_ref(mod_model, ref_model, cri_pers, val_loader, ref_model_optim, True)
-        # combine current concat weights with previous concat weights
-        if LOSS_GUIDED: update_concat_weights(concat_weights, cur_concat_weights)
+        tilde_mod_weights = train.train_ref(m2p2_model, ref_model, cri_pers, val_loader, ref_model_optim, True)
+        # moving average by combing current concat weights with previous concat weights
+        if WITH_HET_MODULE: utils.update_mod_weights(mod_weights, tilde_mod_weights)
 
         # gather information and print in verbose mode
         end_time = time.time()
-        epoch_mins, epoch_secs = epoch_time(start_time, end_time)
-        if epoch % 2 == 0 and VERBOSE:
-            print(f'Epoch: {epoch+1:02} | Time: {epoch_mins}m {epoch_secs}s')
-            if LOSS_GUIDED:
-                print('concat weights', concat_weights)
+        epoch_mins, epoch_secs = utils.epoch_time(start_time, end_time)
+        if epoch % 1 == 0 and VERBOSE:
+            print(f'Epoch: {epoch + 1:02} | Time: {epoch_mins}m {epoch_secs}s')
+            if WITH_HET_MODULE:
+                print('modality weights', mod_weights)
             print(f'\tTrain alignment loss:{train_emb_loss:.5f}\tTrain persuasion loss:{train_pers_loss:.5f}')
             print(f'\tVal alignment loss:{val_emb_loss:.5f}\tVal persuasion loss:{val_pers_loss:.5f}')
-    ##### end of training process #####
+    ##### end of training process (master procedure in alg 1) #####
+
 else:
     ##### load pre-trained model and test #####
-    concat_weights = LoadModelDict(mod_model, PRETRAIN_MODEL_DIR)
-    tes_emb_loss, tes_pers_loss = train(tes_loader, main_optim, criterion, concat_weights, evaluate = True)
-    print(round(tes_pers_loss,3))
+    mod_weights = utils.LoadModelDict(m2p2_model, PRETRAIN_MODEL_DIR)
+    tes_emb_loss, tes_pers_loss = train.train_m2p2(m2p2_model, tes_loader, m2p2_optim, cri_align, cri_pers,
+                                                   COSINE, mod_weights, GAMMA, evaluate=True)
+    print('MSE:',round(tes_pers_loss, 3))
     ##### end of testing #####

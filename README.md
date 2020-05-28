@@ -15,19 +15,19 @@ Create a folder to save your own trained models:
 To test the performance of our pre-trained model, run
 >block quote
 
-    python main.py --test --fd=FOLD
+    python main.py --test_mode --fd=FOLD
 The MSE loss in the test set of fold FOLD will be printed.
 
 To train the model we proposed, run
 >block quote
 
-    python main.py --wloss --fd=FOLD --verbose
-This will train the model for fold FOLD and output the concat weights as well as training and validation loss every 2 epochs (if enabling *verbose*), the trained model and concat weights  will be saved in *new\_trained\_models/FOLD*.
+    python main.py --het_module --fd=FOLD --verbose
+This will train the model for fold FOLD and output the concat weights as well as training and validation loss every 2 epochs (if enabling *verbose*), the trained model and concat weights  will be saved in *new\_trained\_models/fold[FOLD]/*.
 
 ### Code details
-* main.py. Execute the training / testing of the whole work.
+* main.py. Executes the training / testing of the whole work.
 
-* dataset.py. Load raw features from all modalities to pytorch.
+* dataset.py. Loads raw features from all modalities to pytorch.
 
 * model.py. Our model for learning latent embeddings, making predictions and reference models.
 

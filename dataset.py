@@ -14,7 +14,9 @@ class qpDataset(Dataset):
         self.samplefun = {'a':self.loadCovarepSample, 'v':self.loadVideoSample,
                           'l':self.loadLangSample}
 
-        self.feat_src = './qps_dataset/' # root directory of the qps dataset
+        # root directory of the qps dataset
+        # self.feat_src = './qps_dataset/'
+        self.feat_src = '/dfs/scratch2/cy2/debate/qipashuo/09feats/'
 
         self.lang_k = 'tencent_emb.npy'
         self.video_k = 'vgg_1fc'

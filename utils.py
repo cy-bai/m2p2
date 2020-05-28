@@ -1,11 +1,11 @@
+# common util functions
 import os,sys,glob,json,time
 import numpy as np
 import scipy.io as sio
 import pandas as pd
-from scipy.spatial.distance import cosine as spcosine
 import pickle
-from collections import OrderedDict
-from random import shuffle
+from scipy.special import softmax as spsoftmax
+
 
 import torch
 import torch.nn as nn
@@ -15,8 +15,6 @@ import torchvision.models as models
 
 from dataset import *
 from torch.utils.data import Sampler, Dataset, DataLoader
-
-FOLDS_DIR = './folds_split/'
 
 def epoch_time(start_time, end_time):
     elapsed_time = end_time - start_time
@@ -45,7 +43,7 @@ def GetSplit(fold, df, MODS):
     val_loader = DataLoader(val_data, batch_size=BATCH, shuffle=False, num_workers=N_WORKERS, drop_last=False)
     tes_loader = DataLoader(tes_data, batch_size=BATCH, shuffle=False, num_workers=N_WORKERS, drop_last=False)
 
-    return tra_data, tra_loader, val_loader, tes_loader
+    return tra_loader, val_loader, tes_loader
 
 def ModelMode(model_dict, evaluate = False):
     if evaluate:
@@ -58,20 +56,21 @@ def ModelMode(model_dict, evaluate = False):
 def SaveModel(mod_model, MODEL_DIR, concat_weights):
     mkDir(MODEL_DIR)
     for k,v in mod_model.items():
-        torch.save(v, f'{MODEL_DIR}/{k}')
-    np.savetxt(f'{MODEL_DIR}/concat_weights.txt', np.array(list(concat_weights.values())))
+        torch.save(v.state_dict(), f'{MODEL_DIR}/{k}')
+    np.savetxt(f'{MODEL_DIR}/mod_weights.txt', np.array(list(concat_weights.values())))
 
-def LoadModelDict(mod_model, MODEL_DIR):
-    for k in ['a','v','l','pers']:
+def LoadModelDict(m2p2_model, MODEL_DIR):
+    for k, component_model in m2p2_model.items():
         fnm = f'{MODEL_DIR}/{k}'
         if os.path.isfile(fnm):
             # print(fnm)
-            save_dict = torch.load(fnm)
-            for name, param in save_dict.items():
-                if name in mod_model[k].state_dict():
-                    mod_model[k].state_dict()[name].copy_(param)
+            m2p2_model[k].load_state_dict(torch.load(fnm))
+            # save_dict = torch.load(fnm)
+            # for name, param in save_dict.items():
+            #     if name in m2p2_model[k].state_dict():
+            #         m2p2_model[k].state_dict()[name].copy_(param)
             # mod_model[k].load_state_dict(torch.load(fnm))
-    concat_weights = np.loadtxt(f'{MODEL_DIR}/concat_weights.txt')
+    concat_weights = np.loadtxt(f'{MODEL_DIR}/mod_weights.txt')
     return {'a':concat_weights[0],'v':concat_weights[1],'l':concat_weights[2]}
 
 def updateLR(optim, scale=5):
@@ -79,7 +78,12 @@ def updateLR(optim, scale=5):
     for g in optim.param_groups:
         g['lr'] /= scale
 
-def update_concat_weights(weights, cur_weights):
+# two functions to compute the modality weights for het module
+def calc_cur_mod_weights(mod_pers_loss, N_dataset):
+    norm_mod_loss = np.array(list(mod_pers_loss.values())) / N_dataset
+    return spsoftmax(-BETA * norm_mod_loss)
+
+def update_mod_weights(weights, cur_weights):
     for k,v in weights.items():
         weights[k] = UPD_WEIGHT * weights[k] + (1-UPD_WEIGHT) * cur_weights[k]
 
@@ -98,20 +102,28 @@ def AlignmentLoss(out_mod, criterion, COSINE, MODS):
 def PersLoss(y_pred, y_true, criterion):
     return criterion(y_pred[:,0], y_true)
 
+FOLDS_DIR = './folds_split/'
 # dataset index file
 META = './qps_index.csv'
 # employed hyperparameters & constants
-UPD_WEIGHT = 0.5
 BATCH = 32
-N_WORKERS = 4
-MAX_DUR = 482 # we devided all speaking length by this max value to normalize
-N_EPOCHS = 300
-N_REF_EPOCHS = 2
-BETA = 50 # weight in the softmax function for concatenation weights
+N_WORKERS = 4 # dataloader
+MAX_DUR = 482 # we divided all speaking length by this max length to normalize
+
+UPD_WEIGHT = 0.5 # update rate for modality weights
+BETA = 50 # weight in the softmax function for modality weights
+N_EPOCHS = 200 # master training procedure (alg 1 in paper)
+n_EPOCHS = 10 # slave training procedure (alg 1 in paper)
+# optimizer
+LR = 1e-3
+W_DCAY = 1e-5
 
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.manual_seed(3)
 torch.cuda.manual_seed_all(3)
 torch.backends.cudnn.deterministic = True
-print(device)
+# torch.autograd.set_detect_anomaly(True)
+print('device', device)
+
+
