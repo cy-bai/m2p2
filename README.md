@@ -41,10 +41,10 @@ This will train the model for fold FOLD and output the concat weights as well as
 * models/. Save pre-trained models and concat weights for each fold.
 
 ## QPS dataset
-*qps\_index.csv* stores the index of the whole dataset, including the debate episode ID ("deb"), clip ID ("clip"), segment ID ("seg_id"), change of votes ("change"), post vote ("ed_vote"), clip length (dur_sec), etc.
+*qps\_index.csv* stores the meta-data of the whole dataset, including the columns: debate episode ID ("deb"), clip ID ("clip"), segment ID ("seg_id"), change of votes ("change"), post vote ("ed_vote"), clip length ("dur_sec"), etc.
 
 Download and extract *qp_dataset.tar.gz* to get the dataset. Inside, each folder represents a segment corresponding to *qps\_index.csv* by the "seg_id" column. 
 
-In each segment folder, *covarep\_norm.npy* is the extracted COVAREP audio features, *tencent\_emb.npy* is the extracted word embeddings, and *vgg_1fc* stores the extracted features of each frame extracted from the pre-trained CNN without the last fc layer. We use these features as input to get the input embeddings.
+In each segment folder, *covarep\_norm.npy* is the extracted COVAREP audio features, *tencent\_emb.npy* is the extracted word embeddings, and *vgg_1fc* stores the extracted features of each frame extracted from the pre-trained CNN without the last FC layer. We use these features as input to get the primary input embeddings.
 
 **Now we have only released the raw features. We are working on getting the license and copyright from iQIYI. We will release the original videos once getting their approval.**
