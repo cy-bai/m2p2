@@ -15,8 +15,7 @@ class qpDataset(Dataset):
                           'l':self.loadLangSample}
 
         # root directory of the qps dataset
-        # self.feat_src = './qps_dataset/'
-        self.feat_src = '/dfs/scratch2/cy2/debate/qipashuo/09feats/'
+        self.feat_src = './qps_dataset/'
 
         self.lang_k = 'tencent_emb.npy'
         self.video_k = 'vgg_1fc'
