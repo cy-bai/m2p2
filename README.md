@@ -14,13 +14,15 @@ We release the QPS dataset collected from the popular Chinese debate TV show, Qi
 
 The histogram of normalized vote changes (i.e.  (post-vote - pre-vote)/100) is as follows:
 
-![histogram|800x400,40%](https://raw.githubusercontent.com/cy-bai/m2p2/master/hist_vote_change.png)
+<img src="https://raw.githubusercontent.com/cy-bai/m2p2/master/hist_vote_change.png" width="600" height="300">
+
+### Files
+*qp\_dataset.tar.gz* and *qps\_index.csv*.
 
 ### Format
-
 *qps\_index.csv* stores the meta-data of the whole dataset, including the columns: debate episode ID ("deb"), clip ID ("clip"), segment ID ("seg_id"), change of votes ("change"), post vote ("ed_vote"), clip length ("dur_sec"), etc.
 
-Download and extract *qp_dataset.tar.gz* to get the dataset. Inside, each folder represents a segment corresponding to *qps\_index.csv* by the "seg_id" column. 
+Extract *qp\_dataset.tar.gz*. Inside, each folder represents a segment corresponding to *qps\_index.csv* by the "seg_id" column. 
 
 In each segment folder, *covarep\_norm.npy* is the extracted COVAREP audio features, *tencent\_emb.npy* is the extracted word embeddings, and *vgg_1fc* stores the extracted features of each frame extracted from the pre-trained CNN without the last FC layer. We use these features as input to get the primary input embeddings.
 
