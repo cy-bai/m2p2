@@ -14,7 +14,7 @@ We release the QPS dataset collected from the popular Chinese debate TV show, Qi
 
 The histogram of normalized vote changes (i.e.  (post-vote - pre-vote)/100) is as follows:
 
-![alt text](https://raw.githubusercontent.com/cy-bai/m2p2/master/hist_vote_change.png "Histogram")
+<img src="https://raw.githubusercontent.com/cy-bai/m2p2/master/hist_vote_change.png" alt="alt text" title="Histogram" style="zoom:50%;" />
 
 ### Format
 
