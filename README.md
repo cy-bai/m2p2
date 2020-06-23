@@ -1,5 +1,5 @@
 # Dataset and code for M2P2: Multimodal Persuasion Prediction using Adaptive Fusion
-
+Please also check the [project page](https://snap.stanford.edu/persuasion/) for more details. 
 ## QPS Dataset
 
 We release the QPS dataset collected from the popular Chinese debate TV show, Qipashuo. The dataset contains multimodal (video, audio, and text) speaking segments of debaters. Each segment is associated with the numbers of pre- and post-vote out of 100 audience. __It is the first multimodal peresuasion dataset with the persuasion intensity__.
@@ -78,3 +78,12 @@ This will train the model for fold FOLD and output the concat weights as well as
 
 * models/. Save pre-trained models and concat weights for each fold.
 
+### Citing
+If you find *M2P2* and / or the *QPS dataset* useful for your research, please consider citing the following paper:
+
+	@misc{bai2020persuasion,
+  Author = {Chongyang Bai and Haipeng Chen and Srijan Kumar and Jure Leskovec and V. S. Subrahmanian},
+  Title = {M2P2: Multimodal Persuasion Prediction using Adaptive Fusion},
+  Year = {2020},
+  Eprint = {arXiv:2006.11405},
+  }
