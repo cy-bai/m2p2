@@ -81,10 +81,10 @@ This will train the model for fold FOLD and output the concat weights as well as
 ### Citing
 If you find *M2P2* and / or the *QPS dataset* useful for your research, please consider citing the following paper:
 
-@misc{bai2020persuasion,
-  Author = {Chongyang Bai and Haipeng Chen and Srijan Kumar and Jure Leskovec and V. S. Subrahmanian},
-  Title = {M2P2: Multimodal Persuasion Prediction using Adaptive Fusion},
-  Year = {2020},
-  Eprint = {arXiv:2006.11405},
-  }
+    @misc{bai2020persuasion, 
+    Author = {Chongyang Bai and Haipeng Chen and Srijan Kumar and Jure Leskovec and V. S. Subrahmanian}, 
+    Title = {M2P2: Multimodal Persuasion Prediction using Adaptive Fusion}, 
+    Year = {2020}, 
+    Eprint = {arXiv:2006.11405},
+    }
 
